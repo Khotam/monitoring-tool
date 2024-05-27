@@ -1,0 +1,43 @@
+calculate_load() {
+    	header=$1
+    	context=$(echo $header | cut -d " " -f 2)
+    	current_load=$2
+    	conf_file_path=$3
+
+    	source $conf_file_path
+
+    	active_alert_var=${context,,}_active_alert_count
+    	active_alert_count=${!active_alert_var}
+
+   	 check_date=$(date)
+
+	if [[ $current_load -ge $ALERT_THRESHOLD && ! -f ${STATE_FILES_PATH}/${context}_on_alarm ]]; then
+		active_alert_count=$(($active_alert_count+1))
+	        eval "$active_alert_var=$active_alert_count"
+
+		echo $context $active_alert_count "in if"
+
+		if [[ $LOG_LEVEL == "error" ]]; then
+			echo "$check_date | ${context} checked: ${current_load}%" >> $LOG_FILE_PATH/${context}.log
+		fi
+
+		if [[ $active_alert_count -ge $ALERT_REPEAT_COUNT ]]; then
+			touch $STATE_FILES_PATH/${context}_on_alarm
+			MESSAGE="${MESSAGE_HEADER}%0A%0A🔥 ${HOST_NAME} 🔥%0A%0A ${header} is over: ${current_load}%"
+			curl -s -X POST https://api.telegram.org/bot$BOT_TOKEN/sendMessage -d chat_id=$CHAT_ID -d text="$MESSAGE" > /dev/null
+		fi
+
+	elif [[ $current_load -lt $ALERT_THRESHOLD && -f ${STATE_FILES_PATH}/${context}_on_alarm ]]; then
+		active_alert_count=0
+	        eval "$active_alert_var=$active_alert_count"
+
+		rm -f $STATE_FILES_PATH/${context}_on_alarm
+		MESSAGE="${MESSAGE_HEADER}%0A%0A✅ ${HOST_NAME} ✅%0A%0A ${header} is normal: ${current_load}%"
+		curl -s -X POST https://api.telegram.org/bot$BOT_TOKEN/sendMessage -d chat_id=$CHAT_ID -d text="$MESSAGE" > /dev/null
+	fi
+	if [[ $LOG_LEVEL == "debug" ]]; then
+		echo "$check_date | ${context} checked: ${current_load}%" >> $LOG_FILE_PATH/${context}.log
+	fi
+}
+
+
